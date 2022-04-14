@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>Bus Tracker</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+        integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+        crossorigin="" />
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+        integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+        crossorigin=""></script>
+    <link rel="stylesheet" href="styles.css">
+    <script src='leaflet-rotatedmarker.js'></script>
+</head>
+
+<body>
+    <div id="map"></div>
+    <script>
+        (function () {
+            let map = L.map('map').setView([44.6488, -63.5752], 13);
+            let arrBus = [];
+            let busLayer;
+            let geoJsonFetch = {
+                "type": "FeatureCollection", "features": []
+            };
+            let myIcon = L.icon({
+                iconUrl: 'bus.png',
+                iconSize: [25, 25],
+                iconAnchor: [0, 0],
+                popupAnchor: [0, 0]
+            });
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            setInterval(updateWorld, 4000);
+
+            function updateWorld() {
+                if (busLayer !== undefined) {
+                    busLayer.clearLayers();
+                }
+
+                fetch('http://hrmbusapi.herokuapp.com/')
+                    .then(res => res.json())
+                    .then(json => {
+                        let data = json.entity.filter(x => x.vehicle.trip.routeId <= 10);
+                        console.log("Json data: ",data);
+                        arrBus = data.map(x => {
+                            let newObj = {};
+                            newObj.id = x.id;
+                            newObj.route = x.vehicle.trip.routeId;
+                            newObj.lat = x.vehicle.position.longitude;
+                            newObj.long = x.vehicle.position.latitude;
+                            newObj.bearing = x.vehicle.position.bearing;
+                            newObj.occupancy = x.vehicle.occupancyStatus;
+                            return newObj;
+                        });
+                    })
+                    .then(x => {
+
+                        busLayer = L.geoJSON(generateGeoFromLatLong(), {
+
+                            onEachFeature: popUp,
+                            pointToLayer: function (feature, latlng) {
+                                return L.marker(latlng,
+                                    {
+                                        icon: myIcon,
+                                        rotationAngle: feature.properties.bearing
+                                    }).addTo(map);
+                            }
+                        }).addTo(map);
+
+                    });
+            }
+            function generateGeoFromLatLong() {
+                geoJsonFetch.features = [];
+
+                arrBus.map(x => {
+                    let geo = {};
+                    geo.type = "Feature";
+                    geo.geometry = {};
+                    geo.geometry.type = "Point";
+                    geo.geometry.coordinates = [x.lat, x.long];
+                    geo.properties = x;
+                    geoJsonFetch.features.push(geo);
+                });
+                console.log("geoJson Data: ",geoJsonFetch);
+                return geoJsonFetch;
+            }
+
+            function popUp(feature, layer) {
+                let occupancy = feature.properties.occupancy;
+                if(occupancy != undefined){
+                    occupancy = occupancy.replaceAll('_',' ');
+                }
+                else{
+                    occupancy = "NO DATA AVAILABLE"
+                }
+                layer.bindPopup("Route# " + feature.properties.route+"<br> Occupancy: " + occupancy);
+            };
+
+
+            // function updateWorld(map) {
+
+            //     fetch('http://hrmbusapi.herokuapp.com/').then(x => x.json())
+            //         .then(x => {
+            //             data = x.entity.filter(x => x.vehicle.trip.routeId <= 10).map(x => {
+            //                 const id = x.id;
+            //                 const lat = x.vehicle.position.latitude;
+            //                 const long = x.vehicle.position.longitude;
+            //                 const route = x.vehicle.trip.routeId;
+            //                 const bearing = x.vehicle.position.bearing;
+
+
+            //                 if (!busLocations[id]) {
+            //                     busLocations[id] = L.marker([lat, long], { icon: myIcon, rotationAngle: bearing }).addTo(map);
+            //                 }
+            //                 else {
+            //                     busLocations[id].setLatLng([lat, long]).update();
+            //                 }
+            //             })
+            //             console.log(x);
+            //         });
+
+            //     let myIcon = L.icon({
+            //         iconUrl: 'bus.png',
+            //         iconSize: [25, 25],
+            //         iconAnchor: [0, 0],
+            //         popupAnchor: [-3, -76]
+            //     });
+            // }
+        })();
+    </script>
+</body>
+
+</html>
